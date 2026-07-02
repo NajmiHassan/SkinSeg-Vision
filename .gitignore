@@ -1,0 +1,45 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# PyTorch checkpoints
+*.pth
+*.pt
+checkpoints/
+
+# Environments and dependencies
+.env
+.venv
+venv/
+ENV/
+env/
+*.egg-info/
+dist/
+build/
+
+# Jupyter Notebook checkpoints
+*.ipynb_checkpoints/
+
+# IDE configurations
+.vscode/
+.idea/
+
+# System / OS files
+.DS_Store
+Thumbs.db
+
+# Gradio application
+app/
+
+# Experiment tracking & Logs
+wandb/
+*.log
+
+# Large Dataset folders (prevent committing raw ISIC data)
+data/
+datasets/
+ISIC2018*/
+*.zip
+*.tar
+*.gz
