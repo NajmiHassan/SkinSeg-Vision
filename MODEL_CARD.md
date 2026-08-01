@@ -125,8 +125,8 @@ from src.model import UNet
 
 # Download weights from Hub
 ckpt_path = hf_hub_download(
-    repo_id="DevNajmi/skin-lesion-segmentation-unet",
-    filename="best_model.pth"
+    repo_id="DevHabiba/skin-lesion-segmentation-unet",
+    filename="best_full_supervised_model.pth"
 )
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

@@ -96,9 +96,14 @@ pip install -r requirements.txt
 ### 2. Download Pre-trained Weights
 Since the model weights (`best_model.pth` ≈ 573MB) exceed GitHub's single-file limits, download them directly from the Hugging Face model repository:
 
-- ⬇️ **Download Checkpoint:** [best_model.pth](https://huggingface.co/DevNajmi/skin-lesion-segmentation-unet/resolve/main/best_model.pth)
+- ⬇️ **Download Checkpoint:** [best_full_supervised_model.pth](https://huggingface.co/DevHabiba/skin-lesion-segmentation-unet/resolve/main/best_full_supervised_model.pth)
 
-Place the downloaded `best_model.pth` file directly in the repository's root directory.
+Place the file in the repository's root directory and rename it to `best_model.pth`:
+
+```bash
+curl -L -o best_model.pth \
+  https://huggingface.co/DevHabiba/skin-lesion-segmentation-unet/resolve/main/best_full_supervised_model.pth
+```
 
 ### 3. Launch Local Web Application
 Run the Streamlit interface locally to run predictions in your browser:

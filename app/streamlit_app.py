@@ -48,7 +48,8 @@ st.set_page_config(
 def load_model():
     """Load the trained U-Net once; reused for every rerun."""
     model = UNet(pretrained=False).to(DEVICE)
-    ckpt  = torch.load(CHECKPOINT, map_location=DEVICE)
+    # weights_only=False: the checkpoint also carries optimizer state and config.
+    ckpt  = torch.load(CHECKPOINT, map_location=DEVICE, weights_only=False)
     model.load_state_dict(ckpt['model_state'])
     model.eval()
     return model, ckpt
@@ -161,11 +162,11 @@ with st.spinner("Running segmentation..."):
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    st.image(image, caption="Input image", use_container_width=True)
+    st.image(image, caption="Input image", width='stretch')
 with col2:
-    st.image(mask_pil, caption="Predicted mask", use_container_width=True)
+    st.image(mask_pil, caption="Predicted mask", width='stretch')
 with col3:
-    st.image(overlay_pil, caption="Overlay (green = lesion)", use_container_width=True)
+    st.image(overlay_pil, caption="Overlay (green = lesion)", width='stretch')
 
 m1, m2, m3 = st.columns(3)
 m1.metric("Lesion coverage", f"{lesion_pct:.1f}%")
@@ -178,14 +179,14 @@ d1.download_button(
     data=to_png_bytes(mask_pil),
     file_name=f"{os.path.splitext(uploaded.name)[0]}_mask.png",
     mime="image/png",
-    use_container_width=True,
+    width='stretch',
 )
 d2.download_button(
     "⬇️ Download overlay (PNG)",
     data=to_png_bytes(overlay_pil),
     file_name=f"{os.path.splitext(uploaded.name)[0]}_overlay.png",
     mime="image/png",
-    use_container_width=True,
+    width='stretch',
 )
 
 st.caption(
