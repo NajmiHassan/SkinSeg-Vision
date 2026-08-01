@@ -22,8 +22,8 @@ pipeline_tag: image-segmentation
 
 Automated binary segmentation of skin lesions in dermoscopy images, trained on the ISIC 2018 Task 1 dataset.
 
-**Live demo →** [🤗 Hugging Face Spaces](https://huggingface.co/spaces/DevHabiba/skin-lesion-segmentation)  
-**Code →** [GitHub](https://github.com/DevHabiba/skin-lesion-segmentation)
+**Live demo →** [🤗 Hugging Face Spaces](https://huggingface.co/spaces/DevNajmi/skin-lesion-segmentation)  
+**Code →** [GitHub](https://github.com/NajmiHassan/SkinSeg-Vision)
 
 ---
 
@@ -125,7 +125,7 @@ from src.model import UNet
 
 # Download weights from Hub
 ckpt_path = hf_hub_download(
-    repo_id="DevHabiba/skin-lesion-segmentation-unet",
+    repo_id="DevNajmi/skin-lesion-segmentation-unet",
     filename="best_model.pth"
 )
 
@@ -179,12 +179,12 @@ with torch.no_grad():
 If you use this model in your work, please cite:
 
 ```bibtex
-@misc{devhabiba2026skinlesion,
-  author    = {Habiba},
+@misc{devnajmi2026skinlesion,
+  author    = {Najmi},
   title     = {Skin Lesion Segmentation with ResNet-34 U-Net on ISIC 2018},
   year      = {2026},
   publisher = {Hugging Face},
-  url       = {https://huggingface.co/DevHabiba/skin-lesion-segmentation-unet}
+  url       = {https://huggingface.co/DevNajmi/skin-lesion-segmentation-unet}
 }
 ```
 
@@ -207,4 +207,4 @@ If you use this model in your work, please cite:
 - [ISIC Archive](https://www.isic-archive.com/) for the dataset
 - [torchvision](https://pytorch.org/vision/) for the ResNet-34 backbone
 - [Albumentations](https://albumentations.ai/) for augmentation
-- [Gradio](https://gradio.app/) for the demo UI
+- [Streamlit](https://streamlit.io/) for the demo UI

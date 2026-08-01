@@ -29,9 +29,6 @@ build/
 .DS_Store
 Thumbs.db
 
-# Gradio application
-app/
-
 # Experiment tracking & Logs
 wandb/
 *.log

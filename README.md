@@ -1,13 +1,13 @@
 # 🔬 Skin Lesion Segmentation (ISIC 2018)
 
-[![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue?style=for-the-badge)](https://huggingface.co/spaces/DevHabiba/skin-lesion-segmentation)
-[![Hugging Face Model](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Model-orange?style=for-the-badge)](https://huggingface.co/DevHabiba/skin-lesion-segmentation-unet)
+[![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue?style=for-the-badge)](https://huggingface.co/spaces/DevNajmi/skin-lesion-segmentation)
+[![Hugging Face Model](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Model-orange?style=for-the-badge)](https://huggingface.co/DevNajmi/skin-lesion-segmentation-unet)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 [![PyTorch](https://img.shields.io/badge/PyTorch-%3E%3D%202.0-red.svg?style=for-the-badge&logo=pytorch)](https://pytorch.org/)
 
-Automated binary segmentation of skin lesions in dermoscopy images using a **ResNet-34 U-Net** architecture. This repository contains the complete pipeline for dataset preprocessing, training with mixed precision, evaluation, and a Gradio web application for inference.
+Automated binary segmentation of skin lesions in dermoscopy images using a **ResNet-34 U-Net** architecture. This repository contains the complete pipeline for dataset preprocessing, training with mixed precision, evaluation, and a Streamlit web application for inference.
 
-🔗 **Live Demo:** Try the model instantly on [Hugging Face Spaces](https://huggingface.co/spaces/DevHabiba/skin-lesion-segmentation).
+🔗 **Live Demo:** Try the model instantly on [Hugging Face Spaces](https://huggingface.co/spaces/DevNajmi/skin-lesion-segmentation).
 
 ---
 
@@ -44,7 +44,7 @@ Here are sample validation results demonstrating the model's predictions compare
 - **Robust Loss Formulation:** Joint **Binary Cross-Entropy (BCE) + Soft Dice Loss** to handle class imbalance (background vs. lesion pixels).
 - **Data Augmentations:** Heavy geometric and photometric augmentations via [Albumentations](https://albumentations.ai/) (flips, rotations, elastic scale-shifts, color jitters, Gaussian noise) to prevent overfitting.
 - **Efficient Training:** Mixed precision (`torch.cuda.amp`) training and Cosine Annealing learning rate schedule.
-- **Interactive UI:** Built-in [Gradio](https://gradio.app/) dashboard for quick local deployments and seamless Hugging Face Space integration.
+- **Interactive UI:** Built-in [Streamlit](https://streamlit.io/) dashboard with an adjustable binarisation threshold and mask/overlay downloads, for quick local deployments and seamless Hugging Face Space integration.
 
 ---
 
@@ -58,11 +58,11 @@ skin-lesion-segmentation/
 │   ├── losses.py       # BCE-Dice loss functions & evaluation metrics
 │   └── dataset.py      # Custom PyTorch Dataset & Albumentations transforms
 ├── app/
-│   └── app.py          # Gradio interface for local/cloud hosting
+│   └── streamlit_app.py   # Streamlit interface for local/cloud hosting
 ├── scripts/
 │   └── train.py        # Custom training and validation loop CLI
 ├── notebooks/
-│   └── medicalsegmentation.ipynb   # Jupyter notebook containing original research
+│   └── skinseg-vision.ipynb   # Jupyter notebook containing original research
 ├── assets/             # Prediction diagrams and training curves
 ├── .gitignore          # File exclusions (weights, envs, logs, IDEs)
 ├── LICENSE             # MIT License file
@@ -79,8 +79,8 @@ Clone the repository and install dependencies in a virtual environment:
 
 ```bash
 # Clone the repository
-git clone https://github.com/DevHabiba/skin-lesion-segmentation.git
-cd skin-lesion-segmentation
+git clone https://github.com/NajmiHassan/SkinSeg-Vision.git
+cd SkinSeg-Vision
 
 # Create and activate virtual environment
 python -m venv venv
@@ -96,17 +96,17 @@ pip install -r requirements.txt
 ### 2. Download Pre-trained Weights
 Since the model weights (`best_model.pth` ≈ 573MB) exceed GitHub's single-file limits, download them directly from the Hugging Face model repository:
 
-- ⬇️ **Download Checkpoint:** [best_model.pth](https://huggingface.co/DevHabiba/skin-lesion-segmentation-unet/resolve/main/best_model.pth)
+- ⬇️ **Download Checkpoint:** [best_model.pth](https://huggingface.co/DevNajmi/skin-lesion-segmentation-unet/resolve/main/best_model.pth)
 
 Place the downloaded `best_model.pth` file directly in the repository's root directory.
 
 ### 3. Launch Local Web Application
-Run the Gradio interface locally to run predictions in your browser:
+Run the Streamlit interface locally to run predictions in your browser:
 
 ```bash
-python app/app.py
+streamlit run app/streamlit_app.py
 ```
-Open `http://127.0.0.1:7860` in your web browser to upload images and visualize lesion boundaries.
+Streamlit opens `http://localhost:8501` automatically — upload an image, tune the binarisation threshold in the sidebar, and download the predicted mask or overlay.
 
 ---
 
@@ -147,12 +147,12 @@ This repository is licensed under the [MIT License](LICENSE).
 If you use this work, please cite the following datasets and architectures:
 
 ```bibtex
-@misc{devhabiba2026skinlesion,
-  author    = {Habiba},
+@misc{devnajmi2026skinlesion,
+  author    = {Najmi},
   title     = {Skin Lesion Segmentation using ResNet-34 U-Net on ISIC 2018},
   year      = {2026},
   publisher = {Hugging Face},
-  url       = {https://huggingface.co/DevHabiba/skin-lesion-segmentation-unet}
+  url       = {https://huggingface.co/DevNajmi/skin-lesion-segmentation-unet}
 }
 
 @article{tschandl2018ham10000,
