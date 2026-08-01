@@ -207,4 +207,4 @@ If you use this model in your work, please cite:
 - [ISIC Archive](https://www.isic-archive.com/) for the dataset
 - [torchvision](https://pytorch.org/vision/) for the ResNet-34 backbone
 - [Albumentations](https://albumentations.ai/) for augmentation
-- [Streamlit](https://streamlit.io/) for the demo UI
+- [Gradio](https://gradio.app/) for the demo UI

@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 [![PyTorch](https://img.shields.io/badge/PyTorch-%3E%3D%202.0-red.svg?style=for-the-badge&logo=pytorch)](https://pytorch.org/)
 
-Automated binary segmentation of skin lesions in dermoscopy images using a **ResNet-34 U-Net** architecture. This repository contains the complete pipeline for dataset preprocessing, training with mixed precision, evaluation, and a Streamlit web application for inference.
+Automated binary segmentation of skin lesions in dermoscopy images using a **ResNet-34 U-Net** architecture. This repository contains the complete pipeline for dataset preprocessing, training with mixed precision, evaluation, and a Gradio web application for inference.
 
 🔗 **Live Demo:** Try the model instantly on [Hugging Face Spaces](https://huggingface.co/spaces/DevNajmi/skin-lesion-segmentation).
 
@@ -44,7 +44,7 @@ Here are sample validation results demonstrating the model's predictions compare
 - **Robust Loss Formulation:** Joint **Binary Cross-Entropy (BCE) + Soft Dice Loss** to handle class imbalance (background vs. lesion pixels).
 - **Data Augmentations:** Heavy geometric and photometric augmentations via [Albumentations](https://albumentations.ai/) (flips, rotations, elastic scale-shifts, color jitters, Gaussian noise) to prevent overfitting.
 - **Efficient Training:** Mixed precision (`torch.cuda.amp`) training and Cosine Annealing learning rate schedule.
-- **Interactive UI:** Built-in [Streamlit](https://streamlit.io/) dashboard with an adjustable binarisation threshold and mask/overlay downloads, for quick local deployments and seamless Hugging Face Space integration.
+- **Interactive UI:** Built-in [Gradio](https://gradio.app/) dashboard with an adjustable binarisation threshold and a bundled example image, for quick local deployments and seamless Hugging Face Space integration.
 
 ---
 
@@ -58,7 +58,7 @@ skin-lesion-segmentation/
 │   ├── losses.py       # BCE-Dice loss functions & evaluation metrics
 │   └── dataset.py      # Custom PyTorch Dataset & Albumentations transforms
 ├── app/
-│   └── streamlit_app.py   # Streamlit interface for local/cloud hosting
+│   └── app.py          # Gradio interface for local/cloud hosting
 ├── scripts/
 │   └── train.py        # Custom training and validation loop CLI
 ├── notebooks/
@@ -106,12 +106,12 @@ curl -L -o best_model.pth \
 ```
 
 ### 3. Launch Local Web Application
-Run the Streamlit interface locally to run predictions in your browser:
+Run the Gradio interface locally to run predictions in your browser:
 
 ```bash
-streamlit run app/streamlit_app.py
+python app/app.py
 ```
-Streamlit opens `http://localhost:8501` automatically — upload an image, tune the binarisation threshold in the sidebar, and download the predicted mask or overlay.
+Open `http://127.0.0.1:7860` in your browser — upload an image (or click the bundled example), tune the binarisation threshold, and hit **Run segmentation** to visualise the lesion boundary.
 
 ---
 
