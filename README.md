@@ -1,171 +1,203 @@
-# 🔬 Skin Lesion Segmentation (ISIC 2018)
+# SkinSeg-Vision — Skin Lesion Segmentation on ISIC 2018
 
-[![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue?style=for-the-badge)](https://huggingface.co/spaces/DevNajmi/skin-lesion-segmentation)
-[![Hugging Face Model](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Model-orange?style=for-the-badge)](https://huggingface.co/DevNajmi/skin-lesion-segmentation-unet)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
-[![PyTorch](https://img.shields.io/badge/PyTorch-%3E%3D%202.0-red.svg?style=for-the-badge&logo=pytorch)](https://pytorch.org/)
+A ResNet-34 U-Net for binary lesion segmentation in dermoscopy images, trained
+end-to-end on the ISIC 2018 Task 1 dataset. Includes the training pipeline, a
+reproducible evaluation harness, and a Gradio demo.
 
-Automated binary segmentation of skin lesions in dermoscopy images using a **ResNet-34 U-Net** architecture. This repository contains the complete pipeline for dataset preprocessing, training with mixed precision, evaluation, and a Gradio web application for inference.
+[**Live demo**](https://huggingface.co/spaces/NajmiHassan1/SkinSeg-Vision) ·
+[**Weights**](https://huggingface.co/NajmiHassan1/skinseg-vision)
 
-🔗 **Live Demo:** Try the model instantly on [Hugging Face Spaces](https://huggingface.co/spaces/DevNajmi/skin-lesion-segmentation).
-
----
-
-## 📈 Performance & Results
-
-The model has been evaluated on a 15% held-out validation split (~390 images) of the ISIC 2018 Task 1 dataset.
-
-| Metric | Score | Description |
-| :--- | :---: | :--- |
-| **Dice Coefficient / F1** | **0.87** | Measures region-level overlap |
-| **IoU (Jaccard Index)** | **0.80** | Stricter metric for boundary alignment |
-| **Pixel Accuracy** | **0.95** | Percentage of correctly classified pixels |
-
-### Training History
-Below are the loss and metric convergence curves over 40 epochs:
-
-![Training Curves](assets/training_history.png)
+![Predictions](assets/predictions.png)
 
 ---
 
-## 🖼️ Qualitative Predictions
+## Results
 
-Here are sample validation results demonstrating the model's predictions compared to the ground truth annotations:
+Held-out split of 390 images, scored **one image at a time** at threshold 0.5.
 
-![Visual Predictions](assets/predictions.png)
+| Configuration | Dice | IoU | Pixel acc. |
+|---|---|---|---|
+| Raw model output | 0.736 | 0.620 | 0.906 |
+| + test-time augmentation | *run `evaluate.py --ablate`* | | |
+| + mask cleanup | *run `evaluate.py --ablate`* | | |
 
-*Each sample shows the raw dermoscopy input image, the expert ground truth mask, and the predicted binary segmentation mask.*
+The 0.736 figure is the one to compare against published ISIC numbers. It is
+mid-range for this benchmark — competitive baselines land around 0.85–0.90.
+
+### Why the training log says 0.772
+
+The metric printed each epoch during training pools every pixel in a batch of
+16 into a single overlap calculation. Large lesions then dominate both the
+numerator and the denominator, and errors on small lesions barely move the
+number. Per-image averaging — one Dice per image, then a mean — is what the
+segmentation literature reports, and it gives 0.736 for the same checkpoint.
+
+`src/losses.py` now averages per image by default. `dice_score_pooled` is kept
+only so the older logs remain interpretable; it should not be reported.
 
 ---
 
-## 🛠️ Key Features
+## Training
 
-- **Hybrid Architecture:** Combining the rich representation power of an ImageNet pre-trained **ResNet-34 encoder** with a custom **U-Net decoder** with skip connections.
-- **Robust Loss Formulation:** Joint **Binary Cross-Entropy (BCE) + Soft Dice Loss** to handle class imbalance (background vs. lesion pixels).
-- **Data Augmentations:** Heavy geometric and photometric augmentations via [Albumentations](https://albumentations.ai/) (flips, rotations, elastic scale-shifts, color jitters, Gaussian noise) to prevent overfitting.
-- **Efficient Training:** Mixed precision (`torch.cuda.amp`) training and Cosine Annealing learning rate schedule.
-- **Interactive UI:** Built-in [Gradio](https://gradio.app/) dashboard with an adjustable binarisation threshold and a bundled example image, for quick local deployments and seamless Hugging Face Space integration.
+| | |
+|---|---|
+| Dataset | ISIC 2018 Task 1 — 2,594 image/mask pairs |
+| Split | 2,204 train / 390 validation, seed 42 |
+| Input | 256×256, ImageNet normalisation |
+| Architecture | ResNet-34 encoder (ImageNet) + U-Net decoder, 47.9M params |
+| Loss | 0.5 × BCEWithLogits + 0.5 × soft Dice |
+| Optimiser | AdamW, weight decay 1e-4 |
+| Learning rate | encoder 1e-4, decoder 1e-3, cosine annealing to 1e-6 |
+| Schedule | 25 epochs, early stopping patience 8 |
+| Precision | AMP (fp16) |
+| Hardware | Tesla T4, ~92 minutes |
+
+![Training curves](assets/training_history.png)
+
+**On the differential learning rates.** A single LR across the whole network
+is the usual reason a pre-trained-encoder U-Net plateaus early. An LR high
+enough to train a randomly initialised decoder will wash the ImageNet features
+out of the encoder; an LR low enough to preserve them leaves the decoder
+barely moving. Splitting the two roughly ten-to-one resolves the conflict.
+
+Train and validation curves track each other closely to the end, with no
+divergence — the model is **underfitting**, not overfitting. More capacity,
+higher input resolution, or longer training are the levers that will move the
+number, not more regularisation.
 
 ---
 
-## 📂 Repository Structure
+## Repository layout
 
-```directory
-skin-lesion-segmentation/
+```
 ├── src/
-│   ├── __init__.py
-│   ├── model.py        # Model architecture (ResNet-34 U-Net)
-│   ├── losses.py       # BCE-Dice loss functions & evaluation metrics
-│   └── dataset.py      # Custom PyTorch Dataset & Albumentations transforms
-├── app/
-│   └── app.py          # Gradio interface for local/cloud hosting
+│   ├── model.py        ResNet-34 U-Net
+│   ├── dataset.py      Dataset, augmentations, loaders
+│   ├── losses.py       BCE+Dice loss, per-image metrics
+│   ├── inference.py    TTA, full-res thresholding, mask cleanup
+│   └── checkpoint.py   Checkpoint loading and weight export
 ├── scripts/
-│   └── train.py        # Custom training and validation loop CLI
-├── notebooks/
-│   └── skinseg-vision.ipynb   # Jupyter notebook containing original research
-├── assets/             # Prediction diagrams and training curves
-├── .gitignore          # File exclusions (weights, envs, logs, IDEs)
-├── LICENSE             # MIT License file
-├── requirements.txt    # Required python packages
-└── README.md           # Documentation
+│   ├── train.py        Training loop
+│   ├── evaluate.py     Per-image evaluation with ablations
+│   └── export_weights.py
+├── app/app.py          Gradio demo
+├── space/              Flat bundle ready to push to a HF Space
+├── notebooks/          Kaggle training notebook
+└── assets/             Figures
 ```
 
 ---
 
-## 🚀 Quickstart
-
-### 1. Setup Environment
-Clone the repository and install dependencies in a virtual environment:
+## Quick start
 
 ```bash
-# Clone the repository
-git clone https://github.com/NajmiHassan/SkinSeg-Vision.git
+git clone https://github.com/NajmiHassan/SkinSeg-Vision
 cd SkinSeg-Vision
-
-# Create and activate virtual environment
-python -m venv venv
-# On Windows:
-venv\Scripts\activate
-# On Linux/macOS:
-source venv/bin/activate
-
-# Install required packages
 pip install -r requirements.txt
 ```
 
-### 2. Download Pre-trained Weights
-Since the model weights (`best_model.pth` ≈ 573MB) exceed GitHub's single-file limits, download them directly from the Hugging Face model repository:
+### Run the demo
 
-- ⬇️ **Download Checkpoint:** [best_full_supervised_model.pth](https://huggingface.co/DevHabiba/skin-lesion-segmentation-unet/resolve/main/best_full_supervised_model.pth)
-
-Place the file in the repository's root directory and rename it to `best_model.pth`:
-
-```bash
-curl -L -o best_model.pth \
-  https://huggingface.co/DevHabiba/skin-lesion-segmentation-unet/resolve/main/best_full_supervised_model.pth
-```
-
-### 3. Launch Local Web Application
-Run the Gradio interface locally to run predictions in your browser:
+Weights download from the Hub automatically on first launch:
 
 ```bash
 python app/app.py
 ```
-Open `http://127.0.0.1:7860` in your browser — upload an image (or click the bundled example), tune the binarisation threshold, and hit **Run segmentation** to visualise the lesion boundary.
 
----
+Or point at a local checkpoint:
 
-## 🏋️ Training from Scratch
+```bash
+MODEL_PATH=checkpoints/best_weights.pth python app/app.py
+```
 
-To retrain the model, first download the dataset from [ISIC 2018 Challenge — Task 1: Lesion Segmentation](https://challenge.isic-archive.com/landing/2018/).
-
-Run the training script using the CLI:
+### Train
 
 ```bash
 python scripts/train.py \
-    --image_dir "/path/to/ISIC2018_Task1-2_Training_Input" \
-    --mask_dir "/path/to/ISIC2018_Task1_Training_GroundTruth" \
-    --epochs 40 \
-    --batch_size 16 \
-    --lr 3e-4
+  --image_dir data/ISIC2018_Task1-2_Training_Input \
+  --mask_dir  data/ISIC2018_Task1_Training_GroundTruth \
+  --epochs 25 --batch_size 16
 ```
 
-Checkpoint models with the best Validation Dice score will be automatically saved under a new `checkpoints/` directory.
+Writes `checkpoints/best_model.pth` (full checkpoint), `best_weights.pth`
+(model tensors only), `history.json`, and `val_split.json`.
 
----
+### Evaluate
 
-## ⚖️ Limitations & Intended Use
-
-- **Research and Education:** This model is designed for educational demonstrations and research benchmarking. It is **not** a medical device and is **not validated for clinical diagnostics**.
-- **Artifact Sensitivity:** Performance may degrade on images featuring acquisition artifacts (ink marks, ruler lines, surgical tape, or strong vignetting).
-
----
-
-## 📄 License
-
-This repository is licensed under the [MIT License](LICENSE).
-
----
-
-## 🗏 Citations & Acknowledgements
-
-If you use this work, please cite the following datasets and architectures:
-
-```bibtex
-@misc{devnajmi2026skinlesion,
-  author    = {Najmi},
-  title     = {Skin Lesion Segmentation using ResNet-34 U-Net on ISIC 2018},
-  year      = {2026},
-  publisher = {Hugging Face},
-  url       = {https://huggingface.co/DevNajmi/skin-lesion-segmentation-unet}
-}
-
-@article{tschandl2018ham10000,
-  title   = {The HAM10000 dataset, a large collection of multi-source dermatoscopic images of common pigmented skin lesions},
-  author  = {Tschandl, Philipp and Rosendahl, Cliff and Kittler, Harald},
-  journal = {Scientific data},
-  volume  = {5},
-  pages   = {180161},
-  year    = {2018}
-}
+```bash
+python scripts/evaluate.py \
+  --image_dir data/ISIC2018_Task1-2_Training_Input \
+  --mask_dir  data/ISIC2018_Task1_Training_GroundTruth \
+  --weights checkpoints/best_weights.pth \
+  --split_file checkpoints/val_split.json \
+  --ablate
 ```
+
+---
+
+## Inference-time improvements
+
+Three things the demo does that training did not, each free:
+
+**Test-time augmentation.** Averages sigmoid maps over the four-element flip
+group. The model was trained with flip augmentation and is already roughly
+flip-equivariant, so averaging cancels boundary jitter.
+
+**Full-resolution thresholding.** The probability map is upsampled bilinearly
+to the original image size *before* thresholding. Thresholding at 256×256 and
+then upsampling the binary mask with nearest-neighbour quantises the boundary
+to the 256-grid — a visible staircase on a 1022×767 dermoscopy image.
+
+**Largest-component + hole filling.** ISIC Task 1 ground truth is always a
+single contiguous lesion. Any additional blob is therefore a guaranteed false
+positive, and the model produces plenty of them: ruler markings, ink dots,
+vignette corners. Keeping only the largest connected component removes them
+outright, and filling interior holes closes the speckle gaps visible in the
+raw predictions above.
+
+---
+
+## Known limitations
+
+- Dice 0.736 is not state of the art. Published ISIC 2018 baselines reach
+  0.85–0.90.
+- Weakest on low-contrast and amelanotic lesions, images with rulers or
+  coloured stickers, and heavily vignetted captures.
+- Trained and evaluated at 256×256; fine boundary detail is lost at that
+  resolution, which caps achievable Dice regardless of architecture.
+- Single train/val split, no cross-validation, so the reported figure carries
+  a meaningful error bar.
+- `UNet.up_to_half` is a dead layer, never called in `forward()`. It stays
+  declared so the released checkpoint loads strictly; remove it at the next
+  retrain.
+
+## Next steps
+
+Ranked by expected gain per unit of effort:
+
+1. **Train at 384×384 or 512×512.** The single biggest constraint. The curves
+   show underfitting, and boundary precision is resolution-bound.
+2. **Longer schedule.** Validation Dice was still climbing at epoch 25 and
+   early stopping never triggered.
+3. **Boundary-aware loss.** Add a Tversky or boundary term to penalise
+   contour error, which is what Dice under-weights.
+4. **Five-fold cross-validation** for an honest error bar.
+5. **Hair removal preprocessing** (DullRazor-style inpainting) — hair occlusion
+   is a visible failure mode in the sample predictions.
+
+---
+
+## Dataset
+
+ISIC 2018 Challenge Task 1, via the
+[Kaggle mirror](https://www.kaggle.com/datasets/tschandl/isic2018-challenge-task1-data-segmentation).
+Please observe the ISIC Archive terms of use.
+
+## Disclaimer
+
+Research and educational use only. Not a medical device, not clinically
+validated, not for diagnostic use.
+
+## License
+
+MIT

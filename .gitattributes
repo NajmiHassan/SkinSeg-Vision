@@ -1,0 +1,5 @@
+# from your repo root
+@"
+*.pth filter=lfs diff=lfs merge=lfs -text
+*.pt  filter=lfs diff=lfs merge=lfs -text
+"@ | Out-File -FilePath .gitattributes -Encoding ascii

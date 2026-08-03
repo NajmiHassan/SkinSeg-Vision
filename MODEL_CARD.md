@@ -18,24 +18,72 @@ metrics:
 pipeline_tag: image-segmentation
 ---
 
-# 🔬 Skin Lesion Segmentation — ResNet-34 U-Net
+# Skin Lesion Segmentation — ResNet-34 U-Net
 
-Automated binary segmentation of skin lesions in dermoscopy images, trained on the ISIC 2018 Task 1 dataset.
+Binary segmentation of skin lesions in dermoscopy images, trained on ISIC 2018 Task 1.
 
-**Live demo →** [🤗 Hugging Face Spaces](https://huggingface.co/spaces/DevNajmi/skin-lesion-segmentation)  
+**Live demo →** [Hugging Face Spaces](https://huggingface.co/spaces/NajmiHassan1/SkinSeg-Vision)
 **Code →** [GitHub](https://github.com/NajmiHassan/SkinSeg-Vision)
 
 ---
 
 ## Model Description
 
-A U-Net architecture with a ResNet-34 encoder pre-trained on ImageNet, fine-tuned end-to-end for binary skin lesion segmentation. Given a dermoscopy image, the model produces a pixel-wise binary mask distinguishing lesion from background.
+A U-Net with a ResNet-34 encoder pre-trained on ImageNet, fine-tuned end-to-end.
+Given a dermoscopy image the model produces a pixel-wise binary mask separating
+lesion from surrounding skin.
 
-**Architecture highlights:**
-- Encoder: ResNet-34 (ImageNet pre-trained) — captures rich multi-scale features
-- Decoder: Transposed convolution upsampling with skip connections — preserves spatial detail
-- Loss: BCE + Soft Dice (0.5 / 0.5) — balances pixel accuracy with region overlap
-- Mixed precision training (torch.cuda.amp) for efficiency
+- **Encoder:** ResNet-34, ImageNet pre-trained
+- **Decoder:** transposed-convolution upsampling with skip connections
+- **Loss:** 0.5 × BCEWithLogits + 0.5 × soft Dice
+- **Parameters:** 47.9M
+- **Precision:** mixed (`torch.amp`)
+
+---
+
+## Evaluation Results
+
+Held-out split of 390 images, **scored one image at a time** at threshold 0.5.
+
+| Metric | Score |
+|---|---|
+| Dice / F1 | **0.736** |
+| IoU (Jaccard) | **0.620** |
+| Pixel accuracy | **0.906** |
+
+This is mid-range for the benchmark. Published ISIC 2018 baselines reach
+0.85–0.90 Dice, and this model does not match them.
+
+### A note on how Dice was averaged
+
+The training log for this run reports a best validation Dice of 0.772. That
+number pools every pixel in a batch of 16 into one overlap calculation, which
+lets large lesions dominate and dilutes errors on small ones. Averaging Dice
+per image, then taking the mean — the convention in the segmentation
+literature and on the ISIC leaderboard — gives **0.736** for the same
+checkpoint. The lower number is the one reported above and the one to compare
+against other work.
+
+Pixel accuracy is included for completeness but is weak here: most dermoscopy
+images are mostly background, so predicting all-background already scores
+around 0.80.
+
+### Qualitative predictions
+
+![Qualitative segmentation results](assets/predictions.png)
+
+*Each row: input image · ground truth · prediction with per-image Dice.*
+
+Per-image Dice across the six sampled cases: **0.930, 0.833, 0.797, 0.674,
+0.593, 0.373**. That spread is the honest picture. The best cases are large,
+well-demarcated pigmented lesions. The 0.373 case is a faint low-contrast
+lesion beside a red calibration sticker, which the model segments instead of
+the lesion.
+
+Raw predictions also show speckle noise and spurious blobs on ruler markings
+and vignette borders. The demo app suppresses these at inference time by
+keeping only the largest connected component — ISIC ground truth is always a
+single contiguous lesion, so any additional region is a certain false positive.
 
 ---
 
@@ -43,157 +91,163 @@ A U-Net architecture with a ResNet-34 encoder pre-trained on ImageNet, fine-tune
 
 [ISIC 2018 Challenge — Task 1: Lesion Segmentation](https://challenge.isic-archive.com/landing/2018/)
 
-~2,594 dermoscopy images with expert-annotated binary segmentation masks covering diverse lesion types, sizes, and acquisition conditions.
-
-### Sample data
+2,594 dermoscopy images with expert-annotated binary masks, covering diverse
+lesion types, sizes and acquisition conditions. Split 2,204 train / 390
+validation with seed 42.
 
 ![Sample images and masks](assets/sample_data.png)
-
-*Each column shows a dermoscopy image (top) and its corresponding expert-annotated binary mask (bottom).*
 
 ---
 
 ## Training Details
 
 | Parameter | Value |
-|-----------|-------|
+|---|---|
 | Input size | 256 × 256 |
-| Epochs | 40 |
+| Epochs | 25 (early stopping patience 8, never triggered) |
 | Batch size | 16 |
-| Optimizer | AdamW |
-| Learning rate | 3e-4 |
-| Weight decay | 1e-4 |
-| LR scheduler | Cosine Annealing |
-| Loss function | BCE + Soft Dice (0.5 / 0.5) |
-| Precision | Mixed (torch.cuda.amp) |
-| Train / Val split | 85% / 15% |
+| Optimizer | AdamW, weight decay 1e-4 |
+| Learning rate | encoder 1e-4, decoder 1e-3 |
+| LR scheduler | Cosine annealing to 1e-6 |
+| Loss | BCE + soft Dice (0.5 / 0.5) |
+| Precision | Mixed (`torch.amp`) |
+| Train / val split | 85% / 15%, seed 42 |
+| Hardware | Single Tesla T4, ~92 minutes |
 
-**Augmentations:** HorizontalFlip, VerticalFlip, RandomRotate90, ShiftScaleRotate, ColorJitter, GaussNoise
+**Augmentations:** HorizontalFlip, VerticalFlip, RandomRotate90, Affine
+(translate ±5%, scale 0.9–1.1, rotate ±15°), ColorJitter, GaussNoise.
+
+### Differential learning rates
+
+The encoder and decoder train at rates an order of magnitude apart. A single
+shared rate is the common reason a pre-trained-encoder U-Net stalls: a rate
+high enough to train a randomly initialised decoder washes ImageNet features
+out of the encoder, and a rate low enough to preserve them leaves the decoder
+barely moving.
 
 ### Training curves
 
 ![Training history](assets/training_history.png)
 
-*Left: Loss curves — train and val converge closely with no overfitting. Right: Dice and IoU curves — val Dice plateaus around 0.84 by epoch 40.*
-
-Key observations:
-- Loss drops sharply in the first 5 epochs then converges smoothly
-- Train and val loss stay closely aligned throughout — no overfitting
-- Val Dice improves steadily and stabilises, indicating good generalisation
-
----
-
-## Evaluation Results
-
-Evaluated on a 15% held-out split (~390 images) not seen during training.
-
-| Metric | Score |
-|--------|-------|
-| Val Dice / F1 | **0.84** |
-| Val IoU (Jaccard) | **0.64** |
-
-### Qualitative predictions
-
-![Qualitative segmentation results](assets/predictions.png)
-
-*Each row shows: input dermoscopy image · ground truth mask · predicted mask with per-sample Dice score.*
-
-Per-sample Dice scores from the qualitative examples: **0.917, 0.919, 0.885, 0.807, 0.788, 0.775**
-
-The model performs well on typical lesions (Dice > 0.90) and degrades on challenging cases such as low-contrast boundaries, large diffuse lesions, and images with strong acquisition artefacts (ruler, ink marks, circular vignetting).
+Train and validation loss track each other to the final epoch with no
+divergence, and validation Dice was still climbing at epoch 25. The model is
+**underfitting**, not overfitting. Added regularisation would not help; more
+capacity, higher input resolution, or a longer schedule would.
 
 ---
 
 ## How to Use
 
-### Install dependencies
-
 ```bash
-pip install torch torchvision albumentations huggingface_hub Pillow numpy
+pip install torch torchvision albumentations scipy huggingface_hub Pillow numpy
 ```
 
-### Run inference
-
 ```python
-import torch
 import numpy as np
-from PIL import Image
+import torch
+import torch.nn.functional as F
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
+from PIL import Image
 from huggingface_hub import hf_hub_download
-from src.model import UNet
 
-# Download weights from Hub
+from src.model import UNet          # copy model.py from the GitHub repo
+
 ckpt_path = hf_hub_download(
-    repo_id="DevHabiba/skin-lesion-segmentation-unet",
-    filename="best_full_supervised_model.pth"
+    repo_id="NajmiHassan1/skinseg-vision",
+    filename="best_weights.pth",
 )
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model  = UNet(pretrained=False).to(device)
-ckpt   = torch.load(ckpt_path, map_location=device)
+model = UNet(pretrained=False).to(device)
+ckpt = torch.load(ckpt_path, map_location=device, weights_only=True)
 model.load_state_dict(ckpt["model_state"])
 model.eval()
 
 transform = A.Compose([
     A.Resize(256, 256),
-    A.Normalize(mean=(0.485, 0.456, 0.406),
-                std =(0.229, 0.224, 0.225)),
+    A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
     ToTensorV2(),
 ])
 
-# Predict
 image = np.array(Image.open("your_image.jpg").convert("RGB"))
-inp   = transform(image=image)["image"].unsqueeze(0).to(device)
+h, w = image.shape[:2]
+inp = transform(image=image)["image"].unsqueeze(0).to(device)
 
 with torch.no_grad():
-    mask = (torch.sigmoid(model(inp)) > 0.5).float()
+    probs = torch.sigmoid(model(inp))
 
-# mask shape: (1, 1, 256, 256) — values 0 or 1
+# Threshold at full resolution, not at 256x256. Upsampling a binary mask
+# with nearest-neighbour quantises the boundary to the 256-grid, which is a
+# visible staircase on a 1022x767 dermoscopy image.
+probs = F.interpolate(probs, size=(h, w), mode="bilinear", align_corners=False)
+mask = (probs.squeeze().cpu().numpy() > 0.5).astype(np.uint8)
 ```
+
+For test-time augmentation and mask cleanup — both worth using, both free —
+see `src/inference.py` in the GitHub repo.
 
 ---
 
 ## Limitations
 
-- Trained exclusively on dermoscopy images — will not generalise to other imaging modalities (histology, ultrasound, etc.)
-- Performance degrades on images with large acquisition artefacts (rulers, ink markers, heavy vignetting)
-- Not validated for clinical use — **this model is not a medical device**
-- Evaluated on ISIC 2018 only; performance on other dermoscopy datasets may differ
+- Dice 0.736 is below published baselines for this benchmark.
+- Weakest on low-contrast and amelanotic lesions, and on images containing
+  rulers, ink markings or coloured stickers. In the sampled cases above, the
+  worst failure segments a calibration sticker instead of the lesion.
+- Heavy vignetting degrades results; reliability drops near image borders.
+- Trained and evaluated at 256 × 256. Fine boundary detail is discarded at
+  that resolution, which caps achievable Dice regardless of architecture.
+- Single train/validation split, no cross-validation, so the reported figure
+  carries a meaningful error bar.
+- Dermoscopy only. Will not transfer to histology, clinical photography or
+  other modalities.
+- Evaluated on ISIC 2018 alone; performance on other dermoscopy datasets is
+  unmeasured.
+- **Not a medical device.** Not clinically validated.
 
 ---
 
 ## Intended Use
 
-| ✅ Appropriate | ❌ Not appropriate |
+| Appropriate | Not appropriate |
 |---|---|
 | Research and experimentation | Clinical diagnosis |
 | Benchmarking segmentation methods | Medical decision-making |
 | Educational demonstration | Deployment without clinical validation |
-| Pre-processing step in research pipelines | Any safety-critical application |
+| Pre-processing in research pipelines | Any safety-critical application |
 
 ---
 
 ## Citation
 
-If you use this model in your work, please cite:
-
 ```bibtex
-@misc{devnajmi2026skinlesion,
-  author    = {Najmi},
+@misc{hassan2026skinsegvision,
+  author    = {Hassan, Najmi},
   title     = {Skin Lesion Segmentation with ResNet-34 U-Net on ISIC 2018},
   year      = {2026},
   publisher = {Hugging Face},
-  url       = {https://huggingface.co/DevNajmi/skin-lesion-segmentation-unet}
+  url       = {https://huggingface.co/NajmiHassan1/skinseg-vision}
 }
 ```
 
 **Dataset:**
+
 ```bibtex
+@article{codella2019skin,
+  title   = {Skin lesion analysis toward melanoma detection 2018: A challenge
+             hosted by the International Skin Imaging Collaboration (ISIC)},
+  author  = {Codella, Noel and Rotemberg, Veronica and Tschandl, Philipp and
+             others},
+  journal = {arXiv preprint arXiv:1902.03368},
+  year    = {2019}
+}
+
 @article{tschandl2018ham10000,
-  title   = {The HAM10000 dataset, a large collection of multi-source dermatoscopic images of common pigmented skin lesions},
+  title   = {The HAM10000 dataset, a large collection of multi-source
+             dermatoscopic images of common pigmented skin lesions},
   author  = {Tschandl, Philipp and Rosendahl, Cliff and Kittler, Harald},
-  journal = {Scientific data},
+  journal = {Scientific Data},
   volume  = {5},
   pages   = {180161},
   year    = {2018}
@@ -207,4 +261,4 @@ If you use this model in your work, please cite:
 - [ISIC Archive](https://www.isic-archive.com/) for the dataset
 - [torchvision](https://pytorch.org/vision/) for the ResNet-34 backbone
 - [Albumentations](https://albumentations.ai/) for augmentation
-- [Gradio](https://gradio.app/) for the demo UI
+- [Gradio](https://gradio.app/) for the demo interface

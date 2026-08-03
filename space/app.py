@@ -1,17 +1,21 @@
 """
-Gradio demo for ISIC 2018 skin lesion segmentation.
+Gradio demo for ISIC 2018 skin lesion segmentation — ZeroGPU compatible.
 
-Local:
-    python app/app.py
+ZeroGPU allocates a GPU only for the duration of a function decorated with
+@spaces.GPU, and releases it immediately afterwards. Two consequences shape
+this file:
 
-Hugging Face Spaces (SDK: gradio):
-    The Space repo is flat — app.py, model.py, inference.py, requirements.txt
-    all sit at the root. The imports below handle both layouts.
+  1. torch.cuda.is_available() returns False at import time, even though a
+     GPU will be available inside the decorated function. So the usual
+     availability check picks the wrong device. Detect ZeroGPU from the
+     environment instead.
 
-Weights are resolved in this order:
-    1. $MODEL_PATH
-    2. best_weights.pth next to this file, or one directory up
-    3. downloaded from the Hugging Face Hub repo named in $HF_MODEL_REPO
+  2. Weights must be loaded with map_location='cpu' and the model moved to
+     the device afterwards. Loading straight to 'cuda' at startup happens
+     before any GPU exists.
+
+The @spaces.GPU decorator is a no-op outside ZeroGPU, so this file still
+runs unchanged on a local machine or on CPU hardware.
 """
 
 from __future__ import annotations
@@ -25,6 +29,24 @@ import numpy as np
 import torch
 from albumentations.pytorch import ToTensorV2
 from PIL import Image
+
+# `spaces` only exists on Hugging Face infrastructure. Locally, fall back to
+# a decorator that does nothing, so the same file runs in both places.
+try:
+    import spaces
+    _HAS_SPACES = True
+except ImportError:
+    _HAS_SPACES = False
+
+    class _SpacesShim:
+        @staticmethod
+        def GPU(*args, **kwargs):
+            # Support both @spaces.GPU and @spaces.GPU(duration=...)
+            if len(args) == 1 and callable(args[0]) and not kwargs:
+                return args[0]
+            return lambda fn: fn
+
+    spaces = _SpacesShim()
 
 # ── Import shim: works flat (Spaces) or packaged (GitHub repo) ────────────
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -51,7 +73,14 @@ except ModuleNotFoundError:
 
 IMG_SIZE = 256
 THRESHOLD = 0.5
-DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+# On ZeroGPU, cuda is not visible at import time but will be inside the
+# decorated function, so trust the environment flag over is_available().
+ON_ZEROGPU = os.environ.get('SPACES_ZERO_GPU') is not None
+if ON_ZEROGPU:
+    DEVICE = torch.device('cuda')
+else:
+    DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 HF_MODEL_REPO = os.environ.get('HF_MODEL_REPO', 'NajmiHassan1/skinseg-vision')
 WEIGHTS_FILE = os.environ.get('HF_MODEL_FILE', 'best_weights.pth')
@@ -82,14 +111,15 @@ def resolve_weights() -> str:
 #  Load model once at startup
 # ──────────────────────────────────────────────────────────────
 
-print(f"Device: {DEVICE}")
+print(f"ZeroGPU: {ON_ZEROGPU} | target device: {DEVICE}")
 _ckpt_path = resolve_weights()
 
-model = UNet(pretrained=False).to(DEVICE)
-_meta = load_into(model, _ckpt_path, map_location=DEVICE)
+model = UNet(pretrained=False)
+# Always load to CPU first: on ZeroGPU no GPU exists yet at this point.
+_meta = load_into(model, _ckpt_path, map_location='cpu')
 model.eval()
+model.to(DEVICE)
 
-# Plain ASCII in prints: Windows consoles default to cp1252 and choke on emoji.
 print(f"Loaded weights from {_ckpt_path}")
 if _meta.get('best_dice') is not None:
     print(f"  training-time best val Dice: {_meta['best_dice']:.4f}")
@@ -105,6 +135,7 @@ transform = A.Compose([
 #  Inference
 # ──────────────────────────────────────────────────────────────
 
+@spaces.GPU(duration=30)
 def predict(pil_image: Image.Image,
             threshold: float = THRESHOLD,
             use_tta: bool = True,
@@ -186,13 +217,21 @@ the compute and smooths boundary noise. Worth leaving on.
 **Mask cleanup** — keeps only the largest connected region and fills interior
 holes. ISIC ground truth is always a single contiguous lesion, so this removes
 ruler marks, ink dots and vignette corners that the model sometimes picks up.
+Note that on an image the model does not understand, cleanup will still return
+one smooth confident-looking blob — it tidies the output without making it
+correct.
 
 ### Known limitations
+
+This model expects **dermoscopy** images: contact macro shots where a single
+lesion fills much of the frame under flat, even lighting. Clinical photographs,
+phone snapshots and whole-body or facial images are outside its training
+distribution and the output on them is not meaningful.
 
 Trained at 256x256 on 2.2k images for 25 epochs; per-image Dice of 0.74 is
 mid-range for this benchmark, not state of the art. It struggles most with
 low-contrast lesions, images containing rulers or coloured stickers, and
-strong vignetting. Predictions are less reliable near image borders.
+strong vignetting. Boundaries tend to be over-segmented by a small margin.
 """
 
 DISCLAIMER = (
@@ -227,23 +266,28 @@ with gr.Blocks(title="Skin Lesion Segmentation") as demo:
         outputs=[out_mask, out_overlay, info_box],
     )
 
-    _examples_dir = os.path.join(_ROOT, 'assets', 'examples')
-    if os.path.isdir(_examples_dir):
-        _files = sorted(
-            os.path.join(_examples_dir, f)
-            for f in os.listdir(_examples_dir)
-            if f.lower().endswith(('.jpg', '.jpeg', '.png'))
-        )
-        if _files:
-            gr.Examples(
-                examples=[[f, THRESHOLD, True, True] for f in _files],
-                inputs=[inp_img, threshold, tta_box, clean_box],
-                cache_examples=False,
+    for _dir in (os.path.join(_HERE, 'examples'),
+                 os.path.join(_ROOT, 'assets', 'examples')):
+        if os.path.isdir(_dir):
+            _files = sorted(
+                os.path.join(_dir, f) for f in os.listdir(_dir)
+                if f.lower().endswith(('.jpg', '.jpeg', '.png'))
             )
+            if _files:
+                gr.Examples(
+                    examples=[[f, THRESHOLD, True, True] for f in _files],
+                    inputs=[inp_img, threshold, tta_box, clean_box],
+                    cache_examples=False,
+                )
+                break
 
     gr.Markdown(NOTES)
     gr.Markdown(f"---\n{DISCLAIMER}")
 
 
 if __name__ == '__main__':
-    demo.launch(share=False)
+    # gradio_client's schema walker raises "TypeError: argument of type 'bool'
+    # is not iterable" on a component schema whose additionalProperties is a
+    # bare bool, killing the Space on /info at startup. show_api=False skips
+    # schema generation; ssr_mode=False turns off SSR, which this demo does not need.
+    demo.launch(share=False, show_api=False, ssr_mode=False)

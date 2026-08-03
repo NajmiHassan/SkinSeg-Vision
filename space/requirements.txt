@@ -1,0 +1,15 @@
+# ZeroGPU Spaces: `spaces` provides the @spaces.GPU decorator.
+spaces
+torch>=2.2
+torchvision>=0.17
+opencv-python-headless>=4.9
+albumentations>=1.4
+numpy>=1.24
+pillow>=10.0
+scipy>=1.11
+huggingface_hub>=0.23
+# gradio 5.9.1's gradio_client schema walker cannot parse the
+# additionalProperties form emitted by pydantic 2.11+, which raises
+# "TypeError: argument of type 'bool' is not iterable" on the /info
+# endpoint and kills the Space at startup.
+pydantic<2.11
